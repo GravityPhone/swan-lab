@@ -105,8 +105,9 @@ max tokens, temperature 0), included in the NanoGPT subscription. Other included
 (trained to rank the system prompt above the user), `nvidia/nemotron-3-ultra-550b-a55b` (largest),
 `google/gemma-4-31b-it` (held its system prompt best in Balp-Straffon et al. 2026).
 
-Second target: `openai/gpt-oss-120b` by default (blank = off). After a BROKE, the assistant retests the same idea on
-the other target. Judge: `z-ai/glm-4.7-flash` (blank = off) grades every reply in parallel with the assistant; its
+More targets: any number of models, comma-separated (`openai/gpt-oss-120b` by default; blank = none). After a
+BROKE, the assistant retests the same idea on another target. "Assistant may also pick any recent subscription model"
+adds the NanoGPT subscription models from the last 60 days as allowed targets. Judge: `z-ai/glm-4.7-flash` (blank = off) grades every reply in parallel with the assistant; its
 verdict shows as a "judge:" badge, in TRIED SO FAR, and as a separate tally in the saved .md.
 
 Multi-turn (off by default; the top bar shows the mode): only you turn it on, by saying "multi-turn" in chat
@@ -125,3 +126,8 @@ Long runs: Steps goes up to 500. Once a chat's history passes ~100k tokens, the 
 message, a note with your recent messages and all its progress notes, and the last ~20 steps; TRIED SO FAR shows the
 latest 60 attempts plus a summary of older ones. Everything is still saved and shown in full. The run lives in the
 browser tab, so keep the tab open and the laptop awake.
+
+Picking a target: Models → "Browse subscription models…" lists every model in the NanoGPT subscription (live from
+NanoGPT, newest first). Sort by date, size or context; search; click a row for the description and links (NanoGPT page,
+Hugging Face, web search); "Target" puts it in the Target box; "+ More" adds it to (or removes it from) the More targets list. The date is NanoGPT's (close to release for new models,
+sometimes the date NanoGPT added an older one). Size is read from the description, e.g. "560B (25B active)"; "?" = not stated.

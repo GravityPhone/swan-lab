@@ -99,6 +99,49 @@ def refresh_prices():
         print(f"price refresh failed ({e}); using built-in prices")
 
 
+_SUB = {"t": 0, "models": []}
+
+
+def model_size(m):
+    """Parameter counts (billions) read from the id, name and description; None where NanoGPT doesn't say."""
+    text = f"{m['id']} {m.get('name', '')} {m.get('description') or ''}"
+    total = active = None
+    a = re.search(r"[-\s]a(\d+(?:\.\d+)?)b\b", text, re.I)  # "550B A55B", "550b-a55b"
+    if a:
+        active = float(a[1])
+    for g in re.finditer(r"\b(\d+(?:\.\d+)?)\s*-?\s*(trillion|billion|[TB])\b", text, re.I):
+        val = float(g[1]) * (1000 if g[2][0] in "tT" else 1)
+        after, before = text[g.end():g.end() + 45].lower(), text[max(0, g.start() - 12):g.start()].lower()
+        if re.match(r"[\s-]*(param\w*\s+)?activ", after) or re.search(r"activ\w*\s+(only\s+)?$", before):
+            active = active or val
+        elif re.match(r"\s*([\w-]+\s+){0,4}(token|word|image|sample|row|example)", after):  # "15T ... tokens" of training data
+            continue
+        elif total is None:
+            total = val
+    return total, active
+
+
+def subscription_models():
+    """Models included in the NanoGPT subscription, newest first (cached for an hour)."""
+    if _SUB["models"] and time.time() - _SUB["t"] < 3600:
+        return _SUB["models"]
+    with urllib.request.urlopen("https://nano-gpt.com/api/subscription/v1/models?detailed=true", timeout=30) as r:
+        data = json.loads(r.read()).get("data", [])
+    out = []
+    for m in data:
+        total, active = model_size(m)
+        caps = m.get("capabilities") or {}
+        out.append({"id": m["id"], "name": m.get("name") or m["id"], "by": m.get("owned_by") or "",
+                    "date": datetime.fromtimestamp(m.get("created") or 0).strftime("%Y-%m-%d"),
+                    "total": total, "active": active, "context": m.get("context_length"),
+                    "category": m.get("category") or "", "open": m.get("open_weights"),
+                    "thinking": bool(caps.get("reasoning")), "tools": bool(caps.get("tool_calling")),
+                    "description": m.get("description") or ""})
+    out.sort(key=lambda x: x["date"], reverse=True)
+    _SUB.update(t=time.time(), models=out)
+    return out
+
+
 def cost_of(model, usage):
     """List-price estimate from token counts. (The API's own usage.cost can be 0, so it is logged separately.)"""
     if not usage:
@@ -121,6 +164,7 @@ def read_stream(resp, on_delta):
     """Read NanoGPT's server-sent events, pass each piece of thinking/reply to on_delta,
     and return the whole reply in the same shape as a non-streamed response."""
     content, reasoning, finish, usage = [], [], "", {}
+    calls = {}  # native tool calls arrive in pieces, keyed by index
     for raw in resp:
         line = raw.decode("utf-8", "replace").strip()
         if not line.startswith("data: {"):
@@ -136,8 +180,14 @@ def read_stream(resp, on_delta):
             if delta.get("content"):
                 content.append(delta["content"])
                 on_delta("content", delta["content"])
+            for tc in delta.get("tool_calls") or []:
+                call = calls.setdefault(tc.get("index", len(calls)), {"type": "function", "function": {"name": "", "arguments": ""}})
+                f = tc.get("function") or {}
+                call["function"]["name"] += f.get("name") or ""
+                call["function"]["arguments"] += f.get("arguments") or ""
             finish = c.get("finish_reason") or finish
-    return {"choices": [{"message": {"content": "".join(content), "reasoning": "".join(reasoning)}, "finish_reason": finish}],
+    return {"choices": [{"message": {"content": "".join(content), "reasoning": "".join(reasoning),
+                                     "tool_calls": [calls[k] for k in sorted(calls)]}, "finish_reason": finish}],
             "usage": usage}
 
 
@@ -565,6 +615,11 @@ def file_tool(req):
         raise ValueError(f"{rel} does not exist yet; use write to create it")
     with open(full, encoding="utf-8") as f:
         text = f.read()
+    if old and old not in text and "\\" in old:
+        # Some models (e.g. mimo) escape quotes/newlines twice in native tool calls; try the text unescaped once.
+        unescape = lambda s: re.sub(r'\\(["nt\\])', lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), s)
+        if unescape(old) in text:
+            old, new = unescape(old), unescape(new)
     n = text.count(old) if old else 0
     if n == 0:
         raise ValueError("old text not found; read the file and copy the exact text")
@@ -630,6 +685,11 @@ class Handler(BaseHTTPRequestHandler):
                                    "prices": PRICES,
                                    "plannerPrompt": read_text("planner_prompt.txt"), "presets": presets,
                                    "registers": registers})
+        if path == "/api/models":
+            try:
+                return self.send(200, subscription_models())
+            except Exception as e:
+                return self.send(502, {"error": f"couldn't load the subscription list: {e}"})
         if path == "/api/history":
             return self.send(200, history())
         if path == "/api/wins":

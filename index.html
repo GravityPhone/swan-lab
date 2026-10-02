@@ -223,6 +223,34 @@ button.copy:hover { color: var(--ink); border-color: var(--line-strong); backgro
 .entry .code pre { margin: 0; padding: 14px 16px; padding-right: 90px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 13px; line-height: 1.55; color: var(--ink); }
 .entry .code button.copy { position: absolute; top: 8px; right: 8px; margin: 0; background: var(--panel); }
 
+/* ---------- model picker ---------- */
+.browse { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 9px; padding: 6px 10px; font-size: 13px; color: var(--ink); }
+.browse:hover { border-color: var(--faint); }
+#picker { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); display: grid; place-items: center; padding: 16px; }
+.pk { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); width: min(1100px, 100%); height: min(86vh, 100%); display: flex; flex-direction: column; min-height: 0; }
+.pk-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.pk-head h2 { margin: 0 8px 0 0; font-size: 16px; }
+.pk-head input, .pk-head select { background: var(--sunken); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; font-size: 13.5px; outline: none; }
+.pk-head input[type=search] { flex: 1; min-width: 160px; }
+.pk-head .x { margin-left: auto; }
+.pk-note { font-size: 12px; color: var(--faint); padding: 6px 16px; }
+.pk-body { flex: 1; min-height: 0; overflow: auto; }
+.pk table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pk th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.pk th.sort { cursor: pointer; } .pk th.sort:hover { color: var(--ink); } .pk th.on { color: var(--accent); }
+.pk td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pk tr.row { cursor: pointer; } .pk tr.row:hover td { background: var(--sunken); }
+.pk tr.cur td { background: var(--accent-soft); }
+.pk .nm { font-weight: 550; } .pk .id { font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.pk .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pk .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin: 0 3px 3px 0; }
+.pk .acts { white-space: nowrap; }
+.pk .acts button { border: 1px solid var(--line-strong); background: transparent; border-radius: 7px; padding: 2px 8px; font-size: 12px; margin-right: 4px; }
+.pk .acts button:hover { border-color: var(--accent); color: var(--accent); }
+.pk .desc td { background: var(--sunken); font-size: 13px; color: var(--ink); }
+.pk .desc a { color: var(--accent); margin-right: 14px; }
+@media (max-width: 700px) { .pk .hide-sm { display: none; } }
+
 /* ---------- composer ---------- */
 .composer-wrap { padding: 0 24px 14px; position: relative; }
 .composer-wrap::before { content: ""; position: absolute; left: 0; right: 12px; top: -28px; height: 28px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
@@ -282,17 +310,20 @@ button.copy:hover { color: var(--ink); border-color: var(--line-strong); backgro
           <textarea id="targetSystem" rows="10"></textarea></label>
         <label>Functions the target can call, one per line (they do nothing; a call is the result)
           <textarea id="targetFunctions" rows="3" placeholder="transfer_funds(amount: number, to_account) — Send money from the customer's account"></textarea></label>
+        <div id="promptTools" class="hint" style="text-align: left; margin-top: -4px;"></div>
         <details>
           <summary>Models</summary>
           <div class="models">
             <label>Assistant <input id="mPlanner" list="models" value="z-ai/glm-5.3-flash-uncensored"></label>
             <label>Fallback assistant <input id="mFallback" list="models" value="qwen/qwen3.8-27b-uncensored"></label>
             <label>Target <input id="mTarget" list="models" value="meta-llama/llama-4-maverick"></label>
-            <label>Second target (blank = none) <input id="mTarget2" list="models" value="openai/gpt-oss-120b"></label>
+            <label>More targets (any number, comma-separated; blank = none) <input id="mTarget2" value="openai/gpt-oss-120b"></label>
+            <label class="check" title="The assistant is told it can send to any subscription model released in the last 60 days, newest first, on top of the targets above.">
+              <input id="anyRecent" type="checkbox"> Assistant may also pick any recent subscription model (last 60 days)</label>
+            <button id="browseModels" class="browse" title="Every model in the NanoGPT subscription, newest first">Browse subscription models…</button>
             <label>Judge (blank = off) <input id="mJudge" list="models" value="z-ai/glm-4.7-flash"></label>
             <label>Target thinking effort (thinking models only)
               <select id="targetEffort"><option value="">default</option><option>low</option><option>medium</option><option>high</option></select></label>
-            <label>Target max tokens <input id="targetMax" type="number" min="100" value="1000"></label>
             <label class="check" title="Lets the assistant search the web for real example documents. Paid from your NanoGPT balance: about $0.006 per search, $0.0015 per page read.">
               <input id="webOn" type="checkbox" checked> Web search (on; untick to turn off)</label>
           </div>
@@ -345,6 +376,26 @@ button.copy:hover { color: var(--ink); border-color: var(--line-strong); backgro
       </div>
     </div>
   </main>
+</div>
+<div id="picker" hidden>
+  <div class="pk" role="dialog" aria-label="Subscription models">
+    <div class="pk-head">
+      <h2>Subscription models</h2>
+      <input id="pkSearch" type="search" placeholder="Search name, maker, description…">
+      <select id="pkCat"><option value="">All categories</option></select>
+      <label class="check" style="font-size:13px;display:flex;gap:6px;align-items:center"><input id="pkSized" type="checkbox"> only with known size</label>
+      <button id="pkClose" class="icon x" title="Close (Esc)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="pk-note" id="pkNote">Loading…</div>
+    <div class="pk-body"><table><thead><tr>
+      <th class="sort" data-k="name">Model</th>
+      <th class="sort on" data-k="date" title="The date NanoGPT lists. For newer models it's about the release date; for older ones it can be when NanoGPT added it.">Date ↓</th>
+      <th class="sort" data-k="total" title="Total parameters (billions), read from the description">Size</th>
+      <th class="sort hide-sm" data-k="context">Context</th>
+      <th class="hide-sm"></th>
+      <th>Use as</th>
+    </tr></thead><tbody id="pkRows"></tbody></table></div>
+  </div>
 </div>
 <datalist id="models"></datalist>
 <script src="app.js"></script>
